@@ -38,14 +38,14 @@
    pair seen from behind it (its partner is clockwise of its facing), 2 the
    right (partner anticlockwise; this one holds the top rows), 3 single.
 --------------------------------------------------------------------------- */
-import { B, BLOCKS, OPAQUE } from './blocks.js?v=106';
-import { I, ITEMS, fuelTicks, maxStack, sameItem, withCount, stackToJSON, stackFromJSON } from './items.js?v=106';
-import { brewingTick, isPotion, isIngredient, brewResult } from './brewing.js?v=106';
-import { cookingRecipe, remainderOf } from './crafting.js?v=106';
-import { fire } from './dispense.js?v=106';
-import { MAPS, fillPreview } from './maps.js?v=106';
+import { B, BLOCKS, OPAQUE } from './blocks.js?v=107';
+import { I, ITEMS, fuelTicks, maxStack, sameItem, withCount, stackToJSON, stackFromJSON } from './items.js?v=107';
+import { brewingTick, isPotion, isIngredient, brewResult } from './brewing.js?v=107';
+import { cookingRecipe, enrichmentRecipe, remainderOf } from './crafting.js?v=107';
+import { fire } from './dispense.js?v=107';
+import { MAPS, fillPreview } from './maps.js?v=107';
 
-export const SIZES = { chest: 27, trapped_chest: 27, copper_chest: 27, barrel: 27, shulker_box: 27, furnace: 3, smoker: 3, blast_furnace: 3,
+export const SIZES = { chest: 27, trapped_chest: 27, copper_chest: 27, barrel: 27, shulker_box: 27, furnace: 3, smoker: 3, blast_furnace: 3, enrichment_chamber: 3,
   dispenser: 9, dropper: 9, crafter: 9, hopper: 5, brewing_stand: 5 };
 const KIND = new Array(BLOCKS.length).fill(null);
 for (const d of BLOCKS) {
@@ -153,6 +153,7 @@ export class Containers {
   fresh(kind, x, y, z) {
     const c = { kind, slots: new Array(SIZES[kind] || 27).fill(null), x, y, z };
     if (COOKER[kind]) Object.assign(c, { burn: 0, burnMax: 0, cook: 0, cookMax: 200, used: {} });
+    if (kind === 'enrichment_chamber') Object.assign(c, { energy: 0, energyMax: 32000, progress: 0, progressMax: 100 });
     if (kind === 'hopper') { c.cool = 0; c.lastTick = -1; this.hoppers.add(c); }
     if (kind === 'brewing_stand') Object.assign(c, { fuel: 0, brew: 0, ingredient: 0 });
     if (kind === 'crafter') c.off = new Array(9).fill(false);
@@ -297,7 +298,7 @@ export class Containers {
 
   changed(c) {
     this.dirty = true;
-    if (c && (COOKER[c.kind] || c.kind === 'brewing_stand')) this.lit.add(c);
+    if (c && (COOKER[c.kind] || c.kind === 'brewing_stand' || c.kind === 'enrichment_chamber')) this.lit.add(c);
     if (c && c.kind === 'brewing_stand') this.bottles(c);
   }
   // a brewing stand shows a bottle on each arm whose slot holds one (meta bits 0-2, the game's has_bottle_0-2)
@@ -343,7 +344,8 @@ export class Containers {
     if (this.lit.size) this.dirty = true;          // their progress is saved too
     for (const c of this.lit) {
       if (this.map.get(this.key(c.x, c.y, c.z)) !== c) { this.lit.delete(c); continue; }
-      if (!(c.kind === 'brewing_stand' ? brewingTick(c, this.dropAt) : this.furnaceTick(c))) this.lit.delete(c);
+      const active = c.kind === 'brewing_stand' ? brewingTick(c, this.dropAt) : c.kind === 'enrichment_chamber' ? this.enrichmentTick(c) : this.furnaceTick(c);
+      if (!active) this.lit.delete(c);
     }
     for (const h of this.hoppers) {
       if (containerKind(this.world.get(h.x, h.y, h.z)) !== 'hopper' || this.map.get(this.key(h.x, h.y, h.z)) !== h) { this.hoppers.delete(h); continue; }
@@ -382,6 +384,9 @@ export class Containers {
         // from above anything goes into the input; from the sides and below, fuel into the fuel slot
         if (side === 'up') return i === 0;
         return i === 1 && (fuelTicks(st.id) > 0 || (st.id === I.bucket && !(c.slots[1] && c.slots[1].id === I.bucket)));
+      case 'enrichment_chamber':
+        if (side === 'up') return i === 0 && !!enrichmentRecipe(st.id);
+        return i === 1 && fuelTicks(st.id) > 0;
       case 'brewing_stand':
         if (side === 'up') return i === 3 && isIngredient(st);
         if (n === 'blaze_powder') return i === 4;
@@ -393,6 +398,7 @@ export class Containers {
   // may a hopper below take what is in this slot?
   canExtract(c, i, st) {
     if (COOKER[c.kind]) return i === 2 || (i === 1 && (st.id === I.bucket || st.id === I.water_bucket));
+    if (c.kind === 'enrichment_chamber') return i === 2;
     if (c.kind === 'brewing_stand') return i <= 2;
     return true;
   }
@@ -516,6 +522,32 @@ export class Containers {
     if (wasLit !== lit && this.onLit) this.onLit(c, lit);
     return c.burn > 0 || c.cook > 0 || (canCook && !!s[1] && fuelTicks(s[1].id) > 0);
   }
+  enrichmentTick(c) {
+    const s = c.slots, input = s[0] ? s[0].id : 0;
+    if (c.lastInput !== input) { c.lastInput = input; c.progress = 0; }
+    const recipe = input ? enrichmentRecipe(input) : null;
+    const canProcess = !!recipe && (!s[2] || (sameItem(s[2], { id: recipe.id }) && s[2].count + recipe.count <= maxStack(recipe.id)));
+    if (canProcess && c.energy < recipe.energy && s[1] && fuelTicks(s[1].id) > 0) {
+      const amount = fuelTicks(s[1].id) * 4;
+      const fuel = s[1].id;
+      c.energy = Math.min(c.energyMax, c.energy + amount);
+      s[1].count--;
+      if (s[1].count <= 0) { const rem = remainderOf(fuel); s[1] = rem ? { id: rem, count: 1 } : null; }
+    }
+    if (canProcess && (c.progress > 0 || c.energy >= recipe.energy)) {
+      if (!c.progress) c.energy -= recipe.energy;
+      c.progress++;
+      if (c.progress >= recipe.ticks) {
+        c.progress = 0;
+        if (s[2]) s[2].count += recipe.count;
+        else s[2] = { id: recipe.id, count: recipe.count };
+        s[0].count--;
+        if (s[0].count <= 0) { s[0] = null; c.lastInput = 0; }
+      }
+      this.changed(c);
+    } else if (!canProcess) c.progress = 0;
+    return !!(canProcess && (c.progress > 0 || c.energy >= recipe.energy || (s[1] && fuelTicks(s[1].id) > 0)));
+  }
   /* the block shows it too, as the game's lit state: meta bit 2 of a furnace,
      smoker or blast furnace (its front drawn with the fire going and light 13:
      sim/states.js) */
@@ -551,9 +583,10 @@ export class Containers {
     for (const c of this.map.values()) {
       const used = c.used && Object.keys(c.used).length;
       const off = c.off && c.off.some(Boolean);
-      if (!c.slots.some(Boolean) && !used && !off && c.kind !== 'hopper') continue;
+      if (!c.slots.some(Boolean) && !used && !off && !(c.energy > 0) && c.kind !== 'hopper') continue;
       const o = { k: c.kind, p: [c.x, c.y, c.z], s: c.slots.map(stackToJSON) };
       if (COOKER[c.kind]) Object.assign(o, { b: c.burn, bm: c.burnMax, c: c.cook, cm: c.cookMax, u: c.used });
+      if (c.kind === 'enrichment_chamber') Object.assign(o, { en: c.energy, pr: c.progress });
       if (c.kind === 'brewing_stand') Object.assign(o, { f: c.fuel, w: c.brew, g: c.ingredient });
       if (off) o.off = c.off.map(v => (v ? 1 : 0));
       if (c.kind === 'hopper') o.cd = c.cool;
@@ -577,6 +610,12 @@ export class Containers {
         c.used = o.u && typeof o.u === 'object' ? o.u : {};
         // an older save kept the experience as one number
         if (o.x) c.used[String(o.x)] = (c.used[String(o.x)] || 0) + 1;
+        this.lit.add(c);
+      }
+      if (o.k === 'enrichment_chamber') {
+        c.energy = Math.max(0, Math.min(c.energyMax, o.en | 0));
+        c.progress = Math.max(0, Math.min(c.progressMax - 1, o.pr | 0));
+        c.lastInput = c.slots[0] ? c.slots[0].id : 0;
         this.lit.add(c);
       }
       if (o.k === 'hopper') c.cool = o.cd | 0;

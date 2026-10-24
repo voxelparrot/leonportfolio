@@ -15,10 +15,10 @@
      light   block light it gives off (0-15)
      opacity how much sky light it takes away (15 = all, leaves and water 1)
 --------------------------------------------------------------------------- */
-import { DATA } from './blockdata.js?v=106';
-import { MODEL_SHAPES, OFFSET_XZ, OFFSET_XYZ } from './models.js?v=106';
-import { SHELF_TEX } from './shelfmushroom.js?v=106';
-import { dimBlocks } from './dim/blocks.js?v=106';
+import { DATA } from './blockdata.js?v=107';
+import { MODEL_SHAPES, OFFSET_XZ, OFFSET_XYZ } from './models.js?v=107';
+import { SHELF_TEX } from './shelfmushroom.js?v=107';
+import { dimBlocks } from './dim/blocks.js?v=107';
 
 export const AIR = 0;
 export const MAX_ID = 4096;   // block ids are 16-bit in the world; this many fit the lookup tables
@@ -163,6 +163,11 @@ for (const e of DATA) {
   if (o.shape === 'none') { o.solid = false; o.pass = 'none'; if (!o.tex) o.tex = null; }
   def(e.name, o);
 }
+
+def('enrichment_chamber', {
+  display: 'Enrichment Chamber', tab: 'redstone', order: 200, orient: 'facing',
+  tex: { top: 'iron_block', bottom: 'iron_block', side: 'polished_deepslate', front: 'furnace_front' },
+});
 // a shelf mushroom's faces, small and large, each its own piece of the picture (shelfmushroom.js; the layers are
 // made at start-up by render/shelfmushroom.js)
 if (B.shelf_mushroom !== undefined) {

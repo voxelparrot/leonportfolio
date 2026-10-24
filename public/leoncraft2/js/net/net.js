@@ -61,27 +61,27 @@
                   they and their part of the world make, chest lids, bells,
                   explosions, the cracks on the block they mine (events.js)
 --------------------------------------------------------------------------- */
-import { B, BLOCKS } from '../blocks.js?v=106';
-import { idx, H } from '../world-const.js?v=106';
-import { DIMS, DIM_IDS } from '../dims.js?v=106';
-import { Save } from '../save.js?v=106';
-import { itemName, stackToJSON, stackFromJSON, maxStack } from '../items.js?v=106';
-import { glints } from '../render/armor.js?v=106';
-import { containerKind } from '../containers.js?v=106';
-import { getSkinSettings } from '../render/avatar.js?v=106';
-import { RemotePlayers, PlayerList, F, USE_KINDS, playerSize, nameRule } from './players.js?v=106';
-import { register, commandDef, execute, gameRule, homeBed, fail, moveSelf, setPlayerNames } from '../commands.js?v=106';
-import { Y0 } from '../world-const.js?v=106';
-import { weaponOf, enchOf, enchantBonus, wearPerHit, smashBonus } from '../combat/weapons.js?v=106';
-import { Projectile } from '../entities/projectiles.js?v=106';
-import { Combat } from '../combat/combat.js?v=106';
-import { Vehicles } from './vehicles.js?v=106';
-import { Mobs, Orbs } from './mobs.js?v=106';
-import { Events } from './events.js?v=106';
-import { EndSync } from './endfight.js?v=106';
-import { Hub } from './hub.js?v=106';
-import { Account, wsBase, httpBase } from './account.js?v=106';
-import { rankTag } from './players.js?v=106';
+import { B, BLOCKS } from '../blocks.js?v=107';
+import { idx, H } from '../world-const.js?v=107';
+import { DIMS, DIM_IDS } from '../dims.js?v=107';
+import { Save } from '../save.js?v=107';
+import { itemName, stackToJSON, stackFromJSON, maxStack } from '../items.js?v=107';
+import { glints } from '../render/armor.js?v=107';
+import { containerKind } from '../containers.js?v=107';
+import { getSkinSettings } from '../render/avatar.js?v=107';
+import { RemotePlayers, PlayerList, F, USE_KINDS, playerSize, nameRule } from './players.js?v=107';
+import { register, commandDef, execute, gameRule, homeBed, fail, moveSelf, setPlayerNames } from '../commands.js?v=107';
+import { Y0 } from '../world-const.js?v=107';
+import { weaponOf, enchOf, enchantBonus, wearPerHit, smashBonus } from '../combat/weapons.js?v=107';
+import { Projectile } from '../entities/projectiles.js?v=107';
+import { Combat } from '../combat/combat.js?v=107';
+import { Vehicles } from './vehicles.js?v=107';
+import { Mobs, Orbs } from './mobs.js?v=107';
+import { Events } from './events.js?v=107';
+import { EndSync } from './endfight.js?v=107';
+import { Hub } from './hub.js?v=107';
+import { Account, wsBase, httpBase } from './account.js?v=107';
+import { rankTag } from './players.js?v=107';
 export { wsBase, httpBase };
 
 /* ---- who you are, and where the server is ---- */
@@ -399,6 +399,7 @@ function pendingNames() { const n = activeNet, now = performance.now(); return n
 function packContainer(c) {
   const o = { k: c.kind, p: [c.x, c.y, c.z], s: c.slots.map(stackToJSON) };
   if ('burn' in c) Object.assign(o, { b: c.burn, bm: c.burnMax, c: c.cook, cm: c.cookMax, u: c.used });
+  if (c.kind === 'enrichment_chamber') Object.assign(o, { en: c.energy, pr: c.progress });
   if (c.kind === 'brewing_stand') Object.assign(o, { f: c.fuel, w: c.brew, g: c.ingredient });
   if (c.off) o.off = c.off.map(v => (v ? 1 : 0));
   if (c.kind === 'hopper') o.cd = c.cool;
@@ -1619,6 +1620,12 @@ export class Net {
         for (let i = 0; i < c.slots.length; i++) c.slots[i] = sl[i] || null;
         C.looted.add(k);
         if ('burn' in c) { Object.assign(c, { burn: o.b | 0, burnMax: o.bm | 0, cook: o.c | 0, cookMax: o.cm || 200, lastInput: c.slots[0] ? c.slots[0].id : 0 }); c.used = o.u && typeof o.u === 'object' ? o.u : {}; C.lit.add(c); }
+        if (o.k === 'enrichment_chamber') {
+          c.energy = Math.max(0, Math.min(c.energyMax, o.en | 0));
+          c.progress = Math.max(0, Math.min(c.progressMax - 1, o.pr | 0));
+          c.lastInput = c.slots[0] ? c.slots[0].id : 0;
+          C.lit.add(c);
+        }
         if (o.k === 'brewing_stand') { Object.assign(c, { fuel: o.f | 0, brew: o.w | 0, ingredient: o.g | 0 }); C.lit.add(c); }
         if (o.k === 'hopper') c.cool = o.cd | 0;
         if (c.off && Array.isArray(o.off)) for (let i = 0; i < c.off.length; i++) c.off[i] = !!o.off[i];

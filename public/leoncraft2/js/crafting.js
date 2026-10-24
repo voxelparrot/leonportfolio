@@ -25,10 +25,10 @@
      m && m.result                   // { id, count, ... }
      consumeGrid(grid, giveBack, m)  // after the result is taken
 --------------------------------------------------------------------------- */
-import { SETS, CRAFTING, TRANSMUTE, SPECIAL, COOKING, CUTTING } from './recipedata.js?v=106';
-import { I, ITEMS, maxDamage, withCount, STEW_EFFECTS } from './items.js?v=106';
-import { BLOCKS } from './blocks.js?v=106';
-import { RECIPES, ING } from './itemdata.js?v=106';
+import { SETS, CRAFTING, TRANSMUTE, SPECIAL, COOKING, CUTTING } from './recipedata.js?v=107';
+import { I, ITEMS, maxDamage, withCount, STEW_EFFECTS } from './items.js?v=107';
+import { BLOCKS } from './blocks.js?v=107';
+import { RECIPES, ING } from './itemdata.js?v=107';
 
 // ingredient sets as sets of item ids (an item this game does not have is left out)
 const S = SETS.map(names => { const s = new Set(); for (const n of names) if (I[n] !== undefined) s.add(I[n]); return s; });
@@ -44,6 +44,12 @@ for (let i = 0; i < CRAFTING.length; i++) {
   const c = cells.map(setOf);
   if (c.some(x => x && x.size === 0)) continue;
   LIST.push({ id, count, w, h, cells: c, n: c.filter(Boolean).length, cat, group, index: LIST.length, kind: w ? 'shaped' : 'shapeless' });
+}
+if (I.enrichment_chamber !== undefined) {
+  const iron = new Set([I.iron_ingot]), redstone = new Set([I.redstone]), furnace = new Set([I.furnace]);
+  LIST.push({ id: I.enrichment_chamber, count: 1, w: 3, h: 3,
+    cells: [iron, redstone, iron, iron, furnace, iron, iron, redstone, iron], n: 9,
+    cat: 'redstone', group: 'mekanism', index: LIST.length, kind: 'shaped' });
 }
 // transmute: one item of `input` and some of `material` -> the input as `result`, keeping what it carries
 const TRANS = [];
@@ -324,6 +330,28 @@ for (const [kind, input, res, count, xp, ticks, cat, group] of COOKING) {
   const r = { id, count, xp, ticks, cat, group, kind, input: S[input] };
   for (const a of S[input]) if (!COOK[kind].has(a)) COOK[kind].set(a, r);
 }
+for (const [dust, ingot] of [['iron_dust', 'iron_ingot'], ['gold_dust', 'gold_ingot'], ['copper_dust', 'copper_ingot']]) {
+  if (I[dust] !== undefined && I[ingot] !== undefined) {
+    COOK.smelting.set(I[dust], { id: I[ingot], count: 1, xp: 0.7, ticks: 200, kind: 'smelting', input: [I[dust]] });
+  }
+}
+const ENRICHMENT = new Map();
+function addEnrichment(inputs, output, count) {
+  const id = I[output];
+  if (id === undefined) return;
+  const recipe = { id, count, ticks: 100, energy: 40 };
+  for (const name of inputs) if (I[name] !== undefined) ENRICHMENT.set(I[name], recipe);
+}
+addEnrichment(['iron_ore', 'deepslate_iron_ore', 'raw_iron'], 'iron_dust', 2);
+addEnrichment(['gold_ore', 'deepslate_gold_ore', 'raw_gold'], 'gold_dust', 2);
+addEnrichment(['copper_ore', 'deepslate_copper_ore', 'raw_copper'], 'copper_dust', 2);
+addEnrichment(['coal_ore', 'deepslate_coal_ore'], 'coal', 2);
+addEnrichment(['redstone_ore', 'deepslate_redstone_ore'], 'redstone', 12);
+addEnrichment(['lapis_ore', 'deepslate_lapis_ore'], 'lapis_lazuli', 12);
+addEnrichment(['diamond_ore', 'deepslate_diamond_ore'], 'diamond', 2);
+addEnrichment(['emerald_ore', 'deepslate_emerald_ore'], 'emerald', 2);
+addEnrichment(['nether_quartz_ore'], 'quartz', 2);
+export function enrichmentRecipe(id) { return ENRICHMENT.get(id) || null; }
 const COOK_KIND = { furnace: 'smelting', blast_furnace: 'blasting', smoker: 'smoking', campfire: 'campfire_cooking', soul_campfire: 'campfire_cooking' };
 // what an item cooks into in this kind of block: { id, count, xp, ticks } or null
 export function cookingRecipe(id, block) { const m = COOK[COOK_KIND[block] || block]; return (m && m.get(id)) || null; }

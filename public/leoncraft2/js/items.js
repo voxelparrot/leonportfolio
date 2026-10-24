@@ -17,8 +17,8 @@
    Tool, armour, food and fuel numbers are the Minecraft Wiki's (Java Edition,
    October 2026); the list itself is minecraft-data's (js/itemdata.js).
 --------------------------------------------------------------------------- */
-import { B, BLOCKS, MAX_ID } from './blocks.js?v=106';
-import { ITEM_LIST, ITEM_TEX, FOODS } from './itemdata.js?v=106';
+import { B, BLOCKS, MAX_ID } from './blocks.js?v=107';
+import { ITEM_LIST, ITEM_TEX, FOODS } from './itemdata.js?v=107';
 
 export const ITEM_BASE = MAX_ID;          // 4096: the first id that is not a block
 export const ITEMS = [];
@@ -160,10 +160,20 @@ for (const e of ITEM_LIST) {
 // every block with an item that the data does not list (new blocks): an item of its own
 for (const d of BLOCKS) {
   if (!d || !d.id || ITEMS[d.id] || d.item === false || d.lower) continue;
-  const it = makeItem({ n: d.name, d: d.display, s: d.stack || 64 }, d.id, d.id);
+  const it = makeItem({ n: d.name, d: d.display, s: d.stack || 64, tab: d.tab }, d.id, d.id);
   ITEMS[d.id] = it;
   if (I[d.name] === undefined) I[d.name] = d.id;
 }
+const CUSTOM_ITEMS = [];
+function addCustomItem(name, display, icon) {
+  const id = nextItem++;
+  const it = { id, name, display, stack: 64, block: 0, tab: 'materials', texIndex: -1, customIcon: icon,
+    shape: 'item', pass: 'cutout', tint: null, light: 0 };
+  ITEMS[id] = it; I[name] = id; DRAW[id] = it; CUSTOM_ITEMS.push(it);
+}
+addCustomItem('iron_dust', 'Iron Dust', 'iron_nugget');
+addCustomItem('gold_dust', 'Gold Dust', 'gold_nugget');
+addCustomItem('copper_dust', 'Copper Dust', 'copper_ingot');
 export const ITEM_COUNT = nextItem - ITEM_BASE;
 // the bucket items of the fluids keep their item names as aliases
 for (const [alias, name] of [['water', 'water_bucket'], ['lava', 'lava_bucket']]) if (I[name] === undefined && B[alias] !== undefined) I[name] = B[alias];
@@ -188,6 +198,12 @@ export function setItemLayers(first) {
     it.iconLayer = d.iconLayer;
     it.faces = [d.iconLayer, d.iconLayer, d.iconLayer, d.iconLayer, d.iconLayer, d.iconLayer];
     it.icon = d.icon;
+  }
+  for (const it of CUSTOM_ITEMS) {
+    const L = textureLayer(it.customIcon);
+    it.iconLayer = L;
+    it.faces = [L, L, L, L, L, L];
+    it.icon = 'item_' + it.name;
   }
 }
 

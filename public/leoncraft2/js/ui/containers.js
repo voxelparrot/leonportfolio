@@ -17,12 +17,12 @@
    Layouts and sheets are the game's (176 wide, 18-pixel slots); the art is
    Pixel Perfection CE's.
 --------------------------------------------------------------------------- */
-import { ContainerScreen, SearchField, press, slot, range, TO_PLAYER, TO_PLAYER_REVERSED } from './inventory.js?v=106';
-import { RecipeBook } from './recipebook.js?v=106';
-import { I, ITEMS, fuelTicks } from '../items.js?v=106';
-import { isShulkerBox, smeltResult } from '../containers.js?v=106';
-import { cookingRecipe, matchGrid } from '../crafting.js?v=106';
-import { isPotion, isIngredient } from '../brewing.js?v=106';
+import { ContainerScreen, SearchField, press, slot, range, TO_PLAYER, TO_PLAYER_REVERSED } from './inventory.js?v=107';
+import { RecipeBook } from './recipebook.js?v=107';
+import { I, ITEMS, fuelTicks } from '../items.js?v=107';
+import { isShulkerBox, smeltResult } from '../containers.js?v=107';
+import { cookingRecipe, enrichmentRecipe, matchGrid } from '../crafting.js?v=107';
+import { isPotion, isIngredient } from '../brewing.js?v=107';
 
 const LABEL_GREY = 0x404040;
 const MAIN = range(9, 36), HOT = range(0, 9);
@@ -433,6 +433,51 @@ export class FurnaceScreen extends ContainerScreen {
     }
     g.centered(this.title, L + 88, T + 6, LABEL_GREY, false);
     g.text('Inventory', L + 8, T + 72, LABEL_GREY, false);
+    const prev = this.drawSlots(g, mx, my);
+    this.drawCarried(g, mx, my, prev);
+  }
+}
+
+export class EnrichmentChamberScreen extends FurnaceScreen {
+  constructor(inv, icons, c, hooks) {
+    super(inv, icons, c, hooks);
+    this.title = 'Enrichment Chamber';
+  }
+  mayPlace(s, st) {
+    if (s.kind === 'box' && st) {
+      if (s.i === 0) return !!enrichmentRecipe(st.id);
+      if (s.i === 1) return fuelTicks(st.id) > 0;
+      return false;
+    }
+    return super.mayPlace(s, st);
+  }
+  quickMove(s) {
+    const st = this.getStack(s);
+    if (!st) return;
+    if (s.kind === 'box') {
+      this.moveInto(st, s.output ? TO_PLAYER_REVERSED : TO_PLAYER);
+      this.setStack(s, st.count ? st : null);
+    } else if (s.kind === 'inv') {
+      if (enrichmentRecipe(st.id)) this.moveIntoBox(st, [0]);
+      else if (fuelTicks(st.id) > 0) this.moveIntoBox(st, [1]);
+      else this.moveInto(st, s.i >= 9 ? HOT : MAIN);
+      if (!st.count) this.setStack(s, null);
+    }
+  }
+  render(g, mx, my) {
+    this.drawBackdrop(g);
+    const L = this.left, T = this.top, c = this.c;
+    const sheet = 'container/furnace';
+    g.blit(sheet, 0, 0, 176, 166, L, T);
+    g.fill(L + 56, T + 36, L + 70, T + 50, 0xFF555555);
+    const energyHeight = Math.floor(13 * c.energy / c.energyMax);
+    if (energyHeight > 0) g.fill(L + 57, T + 49 - energyHeight, L + 69, T + 49, 0xFF35B8D0);
+    g.fill(L + 80, T + 35, L + 101, T + 49, 0xFF777777);
+    const progressWidth = Math.floor(20 * c.progress / c.progressMax);
+    if (progressWidth > 0) g.fill(L + 80, T + 36, L + 80 + progressWidth, T + 48, 0xFF35B8D0);
+    g.centered(this.title, L + 88, T + 6, LABEL_GREY, false);
+    g.text('Inventory', L + 8, T + 72, LABEL_GREY, false);
+    g.text(Math.floor(c.energy) + ' FE', L + 75, T + 51, LABEL_GREY, false);
     const prev = this.drawSlots(g, mx, my);
     this.drawCarried(g, mx, my, prev);
   }
